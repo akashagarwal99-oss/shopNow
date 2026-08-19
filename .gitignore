@@ -1,0 +1,35 @@
+# --- Terraform ---
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/*.tfplan
+terraform/tfplan
+terraform/crash.log
+terraform/crash.*.log
+
+# --- Credentials / secrets ---
+*.pem
+*.key
+*.p12
+*.ppk
+*credentials*
+*secret*
+.env
+.env.*
+*_rsa
+*_rsa.pub
+
+# --- Ansible ---
+ansible/inventory.ini
+*.retry
+
+# --- Local editor / OS noise ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Explicitly NOT ignored, so this is never accidentally hidden by a broader pattern above ---
+!terraform/terraform.tfvars.example

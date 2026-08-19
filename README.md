@@ -1,353 +1,241 @@
+# ShopNow Capstone Implementation Pack
 
-# 🛒 ShopNow E-Commerce - Kubernetes Learning Project
+## What this pack is
 
-ShopNow is a **Kubernetes learning project** built around a full-stack MERN e-commerce application:
-- **Customer App** (React frontend)  
-- **Admin Dashboard** (React admin panel)  
-- **Backend API** (Express + MongoDB)  
+Copy this directory into the root of your fork of ShopNow. It does not replace the supplied application source or its existing Kubernetes manifests. It adds the files that the capstone expects: Terraform, Ansible, Jenkins CI/CD, availability YAML, monitoring and helper scripts.
 
-This project teaches **Kubernetes** from container basics to production-ready deployments with Dockerfiles, Kubernetes manifests, Helm, GitOps and CICD using Jenkins.
+The pack has already been configured with these values:
 
-## 🎯 Learning Objectives
-- Write Dockerfiles for containerising the application
-- Master Kubernetes fundamentals through hands-on practice
-- Understand and implement HELM Chart for application deployment on kubernetes
-- Implement GitOps workflows using ArgoCD
-- Implement CICD pipelines using Jenkins
+| Placeholder | Meaning | Example |
+| --- | --- | --- |
+| Your name | akash |
+| Kubernetes namespace and project name | akash-shopnow |
+| EKS cluster name | akash-shopnow-eks |
+| AWS Region | ap-south-1 |
+| AWS account ID | 655383751644 |
+| YOUR.PUBLIC.IP.ADDRESS/32 | your current public IP CIDR | 203.0.113.5/32 |
 
----
+## Expected final repository structure
 
-## 📁 Project Structure
+    shopNow/
+      admin/
+      backend/
+      frontend/
+      kubernetes/                 supplied source manifests
+      infra/                      copy from this pack
+      ansible/                    copy from this pack
+      monitoring/                 copy from this pack
+      scripts/                    copy helper scripts from this pack
+      Jenkinsfile                 copy from this pack
+      .gitignore                  merge the supplied rules
 
-```
-shopNow/
-├── backend/               # Node.js API server
-├── frontend/              # React customer app
-├── admin/                 # React admin dashboard
-├── kubernetes
-│   ├── k8s-manifests/     # Raw Kubernetes YAML files
-│   ├── helm/              # Helm charts for package management
-│   │   └── charts/        # Individual charts
-│   ├── argocd/            # GitOps deployment configs
-│   └── pre-req/           # Cluster prerequisites
-├── jenkins/               # Pipeline definitions (CI & CD)       
-├── docs/                  # learning resources and guides
-└── scripts/               # Automation and utility scripts
-```
+## Phase 0: one-time AWS and local setup
 
----
+1. Create or use an AWS account. For a learning lab, your IAM identity must be able to create EKS, VPC, EC2, IAM roles, ECR, S3 and CloudFormation stacks. Use an administrator role only for initial testing; write a least-privilege policy before production.
+2. Install Git, Docker Desktop, AWS CLI v2, Terraform, kubectl, Helm and WSL Ubuntu. Install Ansible in WSL with:
 
-## 🚀 Learning Journey
+       sudo apt update
+       sudo apt install -y ansible
 
-### Container & Kubernetes Basics
-1. **Start Here**: [docs/K8S-CONCEPTS.md](docs/K8S-CONCEPTS.md) - Core concepts explained
-2. **Raw Kubernetes Manifests**: `kubernetes/k8s-manifests/`
+3. Configure AWS and verify identity:
 
-### Package Management & Automation  
-3. **Helm Charts**: `kubernetes/helm/`
-4. **CI/CD Pipelines**: `jenkins/`
+       aws configure --profile capstone
+       $env:AWS_PROFILE = 'capstone'
+       aws sts get-caller-identity
 
-### GitOps & Production Readiness
-5. **ArgoCD GitOps**: `kubernetes/argocd/`
+4. Create an EC2 key pair in the selected Region. Save its PEM file in your WSL .ssh folder and set restrictive owner permissions:
 
+       chmod 400 ~/.ssh/YOUR_KEY.pem
 
-## Getting Started
+5. Find your public address:
 
-## 🛠 Prerequisites & Setup
+       curl https://checkip.amazonaws.com
 
-#### 1. Setup Tools**: [docs/TOOLS-SETUP-GUIDE.md](docs/TOOLS-SETUP-GUIDE.md)
+## Phase 1: fork, clone and customize ShopNow
 
-#### 2. AWS ECR Registry Setup 
-```bash
-# Setup AWS credentials first
-aws configure
-# Enter your AWS Access Key ID, Secret Access Key, region (us-east-1), and output format (json)
+1. Fork the provided repository in GitHub.
+2. Clone the fork and create a working branch:
 
-# Or use environment variables
-export AWS_ACCESS_KEY_ID=your-access-key
-export AWS_SECRET_ACCESS_KEY=your-secret-key
-export AWS_DEFAULT_REGION=us-east-1
+       git clone https://github.com/YOUR_GITHUB_USER/shopNow.git
+       cd shopNow
+       git checkout -b devops-capstone
 
-# If above credentials are already set, run below command to verify
-aws sts get-caller-identity
+3. Copy this pack contents into that cloned directory, preserving supplied folders.
+4. Search all hard-coded examples:
 
-# Create ECR repositories either via the aws cli as mentioned below or via console (Has to be done once to create the ECR repo, skip this step when you are rebuilding the docker images):
+       rg -n "aryan|shopnow-demo|shopnow/(frontend|backend|admin)" .
 
-like:
+5. The source repository specifically requires:
+   - Change ARG USER_NAME in frontend/Dockerfile and admin/Dockerfile.
+   - Change ingress paths to slash akash and slash akash-admin.
+   - Replace username paths in frontend/admin Nginx ConfigMaps.
+   - Change raw manifest namespace fields.
+   - Change all ECR image paths in Deployment YAML, Helm values, and Jenkins pipeline.
+6. Never commit a real secret. Merge this pack's .gitignore rules before the first commit.
 
-aws ecr create-repository --repository-name <your-username>-shopnow/frontend --region <region>
-aws ecr create-repository --repository-name <your-username>-shopnow/backend --region <region>
-aws ecr create-repository --repository-name <your-username>-shopnow/admin --region <region>
+## Phase 2: local-only Docker test (do this now)
 
-# Get login token (run this command everytime as the docker credentials are persisted only on the terminal)
-aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account-id>.dkr.ecr.<region>.amazonaws.com
-```
+Do this phase entirely in WSL. Do not create EKS, Jenkins EC2, NAT Gateway, load balancer, monitoring, or S3 state yet.
 
+    docker build -t akash-shopnow-backend:local backend
+    docker build --build-arg USER_NAME=akash -t akash-shopnow-frontend:local frontend
+    docker build --build-arg USER_NAME=akash -t akash-shopnow-admin:local admin
+    docker image ls | grep akash-shopnow
 
-#### 3. Update Configurations in below mentioned files
+You already created the ECR repositories, so leave them unchanged. Jenkins will authenticate to them and push the first Git-SHA-tagged images only after the Jenkins server and EKS exist.
 
+## Phase 3: prepare infrastructure files locally (do this now)
 
-## 🔧 Personalization Required
+Copy the pack files into your ShopNow clone and customise the supplied ShopNow ingress, namespace, Nginx and image references. Copy infra/terraform.tfvars.example to infra/terraform.tfvars and set your EC2 key-pair name and public IP. Do not commit terraform.tfvars.
 
-**For Multi-User Kubernetes Clusters**: To avoid conflicts when multiple learners use the same cluster, each user must personalize their deployment with unique identifiers.
+Validate Terraform locally without creating an AWS resource:
 
-**IMPORTANT**: This project contains hardcoded references that you must update with your own values:
+    cd infra
+    terraform init -backend=false
+    terraform fmt -recursive
+    terraform validate
 
-3.1. Replace "aryan" with your username in these locations:
+The template pins EKS 1.35. Before applying, verify that it remains supported for ap-south-1. Do not run terraform apply at this stage.
 
-  **Ingress Paths** (in both Kubernetes manifests and Helm charts):
-   - `kubernetes/k8s-manifests/ingress/ingress-shopnow.yaml`
-     - Change `/aryan` to `/<your-username>`
-     - Change `/aryan-admin` to `/<your-username>-admin`
-   
-   - `kubernetes/helm/charts/frontend/values.yaml`
-     - Change `path: /aryan` to `path: /<your-username>`
-   
-   - `kubernetes/helm/charts/admin/values.yaml`
-     - Change `path: /aryan-admin` to `path: /<your-username>-admin`
+## Phase 4: final cloud demo session (paid resources start here)
 
+Do this only when the local Docker builds and Terraform validation pass and you have time to finish the demo. The state bucket name must be globally unique:
 
-  **Nginx ConfigMaps**
-   - All references with 'aryan' to <your-username> in following files:
-   - `kubernetes/k8s-manifests/frontend/cm-nginx.yaml`   
-   - `kubernetes/k8s-manifests/admin/cm-nginx.yaml`
+    export STATE_BUCKET='akash-shopnow-tf-state-655383751644'
+    aws s3api create-bucket --bucket "$STATE_BUCKET" --region ap-south-1 --create-bucket-configuration LocationConstraint=ap-south-1
+    aws s3api put-bucket-versioning --bucket "$STATE_BUCKET" --versioning-configuration Status=Enabled
+    aws s3api put-public-access-block --bucket "$STATE_BUCKET" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+    cd infra
+    terraform init -reconfigure -backend-config="bucket=$STATE_BUCKET" -backend-config="key=shopnow/dev/terraform.tfstate" -backend-config="region=ap-south-1" -backend-config="encrypt=true" -backend-config="use_lockfile=true"
+    terraform plan -out=tfplan
+    terraform apply tfplan
+    terraform output cluster_name
+    terraform output jenkins_public_ip
 
+After Terraform completes, EKS, NAT Gateway, Jenkins EC2, worker nodes, and their charges are active. Finish the remaining phases in the same session where possible.
 
-  **Helm Chart Nginx Configurations**:
-   - All references with 'aryan' in the 'nginx.config' section to <your-username> in following files:
-   - `kubernetes/helm/charts/frontend/values.yaml` 
-   - `kubernetes/helm/charts/admin/values.yaml`
+## Phase 5: configure Jenkins with Ansible
 
-  **Dockerfiles** (Build Arguments):
-   - `frontend/Dockerfile`
-     - Change `ARG USER_NAME=aryan` to `ARG USER_NAME=<your-username>`
-   
-   - `admin/Dockerfile`
-     - Change `ARG USER_NAME=aryan` to `ARG USER_NAME=<your-username>`
+Copy ansible/inventory.ini.example to ansible/inventory.ini and substitute public IP and PEM path. Run:
 
-  **Build Script** (optional):
-   - `scripts/build-and-push.sh`
-     - Update the example usage comments that reference "aryan"
+    cd ansible
+    ansible all -i inventory.ini -m ping
+    ansible-playbook -i inventory.ini jenkins.yml
 
-3.2. **ECR Repository Names** - Update to your username:
-   - All `kubernetes/k8s-manifests/*/deployment.yaml` files
-   - All `kubernetes/helm/charts/*/values.yaml` files
-   - All `jenkins\Jenkinsfile.*.*` files
-   - Change `shopnow/frontend` to `<your-username>-shopnow/frontend`
-   - Change `shopnow/backend` to `<your-username>-shopnow/backend`
-   - Change `shopnow/admin` to `<your-username>-shopnow/admin`
+Then SSH to Jenkins and check the installed tools:
 
-3.3. **Update Namespace** on these locations:
-  - `kubernetes/k8s-manifests/namespace/namespace.yaml` - Change namespace name
-  - All files in `kubernetes/k8s-manifests/*/` - Update namespace references
-  - `kubernetes/argocd/apps/*.yaml` - Update destination namespace
-  - All kubectl commands in this README - Replace `shopnow-demo` with your namespace
+    ssh -i ~/.ssh/YOUR_KEY.pem ec2-user@JENKINS_PUBLIC_IP
+    sudo systemctl status jenkins
+    docker version
+    terraform version
+    kubectl version --client
+    helm version
 
-3.4. **Update ArgoCD Repository URL**:
-  - In `kubernetes/argocd/umbrella-application.yaml` and all `kubernetes/argocd/apps/*.yaml` files:
-  - Change `repoURL: 'https://github.com/aryanm12/shopNow'` 
-  - To `repoURL: 'https://github.com/<your-github-username>/<your-repo-name>'`
+Install Trivy on Jenkins before creating the pipeline, using the current official Trivy package instructions for Amazon Linux. Confirm:
 
+    trivy --version
 
+The Jenkins EC2 IAM role uses ECR and EKS policies and is mapped to the EKS access entry by Terraform. That makes AWS credentials unnecessary in Jenkins for this capstone. For a production system replace broad managed policies and cluster-admin access with task-specific policies/RBAC.
 
-#### 4. Kubernetes Cluster Access (Make sure to have a running Kubernetes cluster, here is an example to connect with EKS)
-```bash
-# For EKS cluster
-aws eks update-kubeconfig --region <region> --name <your-cluster-name>
+Open http://JENKINS_PUBLIC_IP:8080. Retrieve the one-time password:
 
-# Verify access
-kubectl cluster-info
-kubectl get nodes
-```
+    sudo cat /var/lib/jenkins/secrets/initialAdminPassword
 
-Note: All the below mentioned kubectl commands assume that you are working with "shopnow-demo" namespace, update the namespace as per yours where ever you find "shopnow-demo".
+Install suggested plugins plus: Pipeline, Git, Docker Pipeline, Kubernetes CLI, AnsiColor, OWASP Dependency-Check and Slack Notification if you use Slack.
 
-#### 5. Docker Registry Secret (Only required for private ECR registry)
-**Note**: Skip this step if using public Docker Hub images or public ECR repositories.
+## Phase 6: EKS prerequisites and ShopNow deployment
 
-```bash
-# Create registry secret for private ECR image pulls
-kubectl create ns shopnow-demo
-kubectl create secret docker-registry ecr-secret --docker-server=<account-id>.dkr.ecr.us-east-1.amazonaws.com --docker-username=AWS --docker-password=$(aws ecr get-login-password --region us-east-1) --namespace=shopnow-demo
-```
+From your repository root in WSL:
 
-#### 6. Install Pre-requisites in the Kubernetes Environment (Has to be done once per Kubernetes Cluster)
-```bash
-# Install metrics server (required for resource monitoring and HPA)
-kubectl apply -f kubernetes/pre-req/metrics-server.yaml
+    chmod +x scripts/bootstrap-cluster.sh scripts/verify-deployment.sh
+    ./scripts/bootstrap-cluster.sh
 
-# Install ingress-nginx controller (for external access)
-# For EKS, other cloud provider will have different file
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0-beta.0/deploy/static/provider/aws/deploy.yaml
+Create database credentials without committing them:
 
-# For local development (minikube/kind/Docker Desktop)
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/kind/deploy.yaml
+    kubectl -n akash-shopnow create secret generic mongodb-credentials --from-literal=MONGO_INITDB_ROOT_USERNAME=shopuser --from-literal=MONGO_INITDB_ROOT_PASSWORD=YOUR_STRONG_PASSWORD
 
-# Verify installations
-kubectl get pods -n kube-system
-kubectl get pods -n ingress-nginx
-kubectl top nodes  # Should work after metrics server is running
-kubectl top pods  # Should work after metrics server is running
+If ECR pull access has not been given to node roles, make a temporary ECR pull secret:
 
-# To enable Persistent Storage
+    ECR_PASSWORD="$(aws ecr get-login-password --region ap-south-1)"
+    kubectl -n akash-shopnow create secret docker-registry ecr-secret --docker-server=655383751644.dkr.ecr.ap-south-1.amazonaws.com --docker-username=AWS --docker-password="$ECR_PASSWORD"
 
-# First install the EBS CSI driver as an EKS Addon
+Apply the supplied ShopNow raw manifests in dependency order:
 
--> In the EKS Console, open your cluster → go to Add-ons → click Get more add-ons → select Amazon EBS CSI driver → click Next.
--> On the configuration page, Under Pod identity association, choose Create a new IAM role, and the console will auto-attach the AmazonEBSCSIDriverPolicy.
--> Confirm and click Create. The add-on installs, the IAM role is associated with the SA via Pod Identity, and the driver starts running.
--> Verify under Add-ons tab that the EBS CSI driver is active and under Pod identity associations tab you see the SA <-> IAM role mapping.
+    kubectl apply -f kubernetes/k8s-manifests/database/ -n akash-shopnow
+    kubectl apply -f kubernetes/k8s-manifests/backend/ -n akash-shopnow
+    kubectl apply -f kubernetes/k8s-manifests/frontend/ -n akash-shopnow
+    kubectl apply -f kubernetes/k8s-manifests/admin/ -n akash-shopnow
+    kubectl apply -f kubernetes/k8s-manifests/ingress/ -n akash-shopnow
+    kubectl apply -f k8s/hpa-backend.yaml
+    kubectl apply -f k8s/hpa-frontend.yaml
+    kubectl apply -f k8s/pdb-backend.yaml
 
-# Install storage class for persistent volumes
-kubectl apply -f kubernetes/pre-req/storageclass-gp3.yaml
+After mongo-0 is Running, create shopuser in mongosh with the same password used in mongodb-credentials. Then restart backend:
 
-# Verify storage class installation
-kubectl get storageclass
+    kubectl -n akash-shopnow exec -it mongo-0 -- mongosh
+    use admin
+    db.createUser({user:'shopuser',pwd:'YOUR_STRONG_PASSWORD',roles:[{role:'readWrite',db:'shopnow'},{role:'dbAdmin',db:'shopnow'}]})
+    exit
+    kubectl -n akash-shopnow rollout restart deployment/backend
+    ./scripts/verify-deployment.sh
 
+The resource-probe example is deliberately not applied automatically: its backend port and health URL must first be confirmed from the ShopNow backend source. Merge it into each Deployment after validation.
 
-```
+## Phase 7: Jenkins CI/CD
 
+Copy Jenkinsfile into your repository root. Its AWS account, Region, user, project, cluster, and namespace values are already set. First inspect the application scripts:
 
-## ⚡ Build and Deploy the micro-services
+    npm --prefix backend run
+    npm --prefix frontend run
+    npm --prefix admin run
 
-### 1. Build the docker images and push it to the ECR registry created above
+If backend lacks a test script, create one before final evaluation. Do not leave a false passing test stage. Confirm container names before Jenkins uses kubectl set image:
 
-```bash
-scripts/build-and-push.sh <account-id>.dkr.ecr.<region>.amazonaws.com/<registry-name> <tag-name-number> <your-username> 
+    kubectl get deployment backend -n akash-shopnow -o jsonpath="{.spec.template.spec.containers[*].name}"
+    kubectl get deployment frontend -n akash-shopnow -o jsonpath="{.spec.template.spec.containers[*].name}"
+    kubectl get deployment admin -n akash-shopnow -o jsonpath="{.spec.template.spec.containers[*].name}"
 
-# Example for user 'aryan' with tag 'latest' and ECR registry '975050024946.dkr.ecr.ap-southeast-1.amazonaws.com/shopnow':
-./scripts/build-and-push.sh 975050024946.dkr.ecr.ap-southeast-1.amazonaws.com/shopnow latest aryan
+In Jenkins create a Multibranch Pipeline and connect it to your GitHub fork. Set its Jenkinsfile path to Jenkinsfile. Add GitHub webhook:
 
+    http://JENKINS_PUBLIC_IP:8080/github-webhook/
 
-```
+Only main deploys. Feature branches must test/build/scan but must not modify EKS. Each deployment tag is the Git SHA; do not use latest.
 
-### 2. Choose Your Deployment Method
+## Phase 8: monitoring (install only after deployment works)
 
-**Option A: Raw Kubernetes Manifests**
-```bash
-kubectl apply -f kubernetes/k8s-manifests/namespace/
-kubectl apply -f kubernetes/k8s-manifests/database/
-kubectl apply -f kubernetes/k8s-manifests/backend/
-kubectl apply -f kubernetes/k8s-manifests/frontend/
-kubectl apply -f kubernetes/k8s-manifests/admin/
-kubectl apply -f kubernetes/k8s-manifests/ingress/
-kubectl apply -f kubernetes/k8s-manifests/daemonsets-example/
-```
+Install the monitored stack:
 
-**Option B: Helm Charts**
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    helm repo update
+    kubectl create namespace monitoring
+    helm upgrade --install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f monitoring/values.yaml
+    kubectl apply -f monitoring/shopnow-alerts.yaml
+    kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
 
-```bash
-helm upgrade --install mongo kubernetes/helm/charts/mongo -n shopnow-demo --create-namespace
-helm upgrade --install backend kubernetes/helm/charts/backend -n shopnow-demo
-helm upgrade --install frontend kubernetes/helm/charts/frontend -n shopnow-demo
-helm upgrade --install admin kubernetes/helm/charts/admin -n shopnow-demo
-```
+Grafana is at http://localhost:3000. Change the supplied admin password immediately. Show dashboards for node CPU/memory, node readiness, pod restarts, desired versus available replicas, HPA, and ingress traffic. Set Alertmanager Slack/email configuration through secrets, never a tracked live webhook.
 
-**Option C: ArgoCD GitOps**
-```bash
-# Install ArgoCD first
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+## Phase 9: final validation, screenshots and rollback
 
-# Create target namespace
-kubectl create namespace shopnow-demo
+For the capstone demonstration make a harmless code change, push main, and show Jenkins checkout, tests, ECR SHA tags, Trivy result, rollout, app ingress, HPA and Grafana. Then show a safe rollback:
 
-# Deploy applications
-kubectl apply -f kubernetes/argocd/umbrella-application.yaml
+    kubectl -n akash-shopnow rollout history deployment/backend
+    kubectl -n akash-shopnow rollout undo deployment/backend
+    kubectl -n akash-shopnow rollout status deployment/backend --timeout=180s
 
-# Check all ArgoCD application status:
-kubectl get applications -n argocd
+Debug in this sequence:
 
-```
+    kubectl get pods -n akash-shopnow
+    kubectl describe pod POD_NAME -n akash-shopnow
+    kubectl logs POD_NAME -n akash-shopnow --previous
+    kubectl get events -n akash-shopnow --sort-by=.lastTimestamp
+    kubectl top nodes
+    kubectl top pods -n akash-shopnow
 
-### 3. Create users in MongoDB after the mongodb pods are healthy
+## Phase 10: teardown immediately after evidence is saved
 
-```bash
+Run only after all screenshots, logs and reports have been saved:
 
-# check the status of the mongo-0 pods 
-kubectl get pods -n shopnow-demo
+    cd infra
+    terraform destroy
 
-# if mongo-0 pod is healthy, then run following command to create a user for the backend to connect
-# user credentials should be same as mentioned in the backend secrets-db.yaml file
-# First exex into the pods
-kubectl -n shopnow-demo exec -it mongo-0 -- mongosh
-
-# Run below commands
-use admin;
-db.createUser({
-  user: 'shopuser',
-  pwd: 'ShopNowPass123',
-  roles: [
-    { role: 'readWrite', db: 'shopnow' },
-    { role: 'dbAdmin', db: 'shopnow' }
-  ]
-});
-
-exit
-
-# Restart backend deployment
-kubectl rollout restart deploy backend -n shopnow-demo
-```
-
-### 3. Check the resources deployed
-
-```bash
-# Check Pods
-kubectl get pods -n shopnow-demo
-
-# Check Deployment
-kubectl get deploy -n shopnow-demo
-
-# Check Services
-kubectl get svc -n shopnow-demo
-
-# Check daemonsets
-kubectl get daemonsets -n shopnow-demo
-
-# Check statefulsets
-kubectl get statefulsets -n shopnow-demo
-
-# Check HPA
-kubectl get hpa -n shopnow-demo
-
-# Check all of the above at once
-kubectl get all -n shopnow-demo
-
-# Check configmaps
-kubectl get cm -n shopnow-demo
-
-# Check secrets
-kubectl get secrets -n shopnow-demo
-
-# Check ingress
-kubectl get ing -n shopnow-demo
-
-# Sequence to debug in case of any issue with the pods
-kubectl get pods -n shopnow-demo
-kubectl describe pod backend-746cc99cd-cqrgf -n shopnow-demo # Assuming that pod backend-746cc99cd-cqrgf has an error
-kubectl logs backend-746cc99cd-cqrgf -n shopnow-demo --previous # If no details are found in the above command or if details like liveness probe failed are coming
-
-```
-
-
----
-
-## 🌐 Access the Apps
-
-* **Customer App** → [http://<load-balancer-ip-or-dns>/<your-username>](http://<load-balancer-ip-or-dns>/<your-username>)
-* **Admin Dashboard** → [http://<load-balancer-ip-or-dns>/<your-username>-admin](http://<load-balancer-ip-or-dns>/<your-username>-admin)
-
----
-
-## Additional Notes
-
-**Check the Application Architecture details**: [docs/APPLICATION-ARCHITECTURE.md](docs/APPLICATION-ARCHITECTURE.md)
-**Check the Troubleshooting Guide**: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
----
-
-## 👨‍💻 Author
-
-## K Mohan Krishna
-
----
-
+The ECR repositories were created manually and are intentionally not managed or deleted by this runbook. Leave the versioned state bucket until every collaborator confirms they no longer need it. Then empty and delete it.

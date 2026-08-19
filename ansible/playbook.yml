@@ -1,0 +1,222 @@
+---
+- name: Configure Jenkins CI/CD server for ShopNow
+  hosts: all
+  become: true
+  vars:
+    kubectl_version: "v1.34.0"
+    helm_version: "v3.16.4"
+    # Trivy: pinned deliberately, not left to "whatever apt has today". Versions v0.69.4-v0.69.6
+    # were a real supply-chain compromise (CVE-2026-33634, credential-stealing malware). Every
+    # release from v0.69.3 onward is GitHub-immutable (confirmed by the Trivy maintainers), so
+    # v0.74.0 is safe — but it's still installed from a direct, checksum-verified .deb download
+    # rather than the aquasecurity apt repo, as defense in depth. Bump this only to another
+    # version >= 0.69.3, and only deliberately.
+    trivy_version: "0.74.0"
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - wget
+          - gnupg
+          - unzip
+          - software-properties-common
+          - python3-apt
+          - python3-pip
+          - gettext-base   # provides envsubst, used by the Jenkinsfile's Deploy stage
+          - git            # Jenkins checkout, and `git rev-parse --short HEAD` for image tags
+          - jq             # used by the Jenkinsfile to inspect package.json test scripts
+        state: present
+
+    # ---------------- Docker ----------------
+    - name: Install Docker
+      ansible.builtin.apt:
+        name: docker.io
+        state: present
+
+    - name: Ensure Docker is running and enabled
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add ubuntu user to docker group
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: true
+
+    # ---------------- AWS CLI v2 ----------------
+    - name: Check whether AWS CLI is already installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/aws
+      register: aws_cli_present
+
+    - name: Download AWS CLI v2 installer
+      ansible.builtin.get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+      when: not aws_cli_present.stat.exists
+
+    - name: Unzip AWS CLI installer
+      ansible.builtin.unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp
+        remote_src: true
+      when: not aws_cli_present.stat.exists
+
+    - name: Install AWS CLI v2
+      ansible.builtin.command: /tmp/aws/install
+      when: not aws_cli_present.stat.exists
+
+    # ---------------- kubectl ----------------
+    - name: Download kubectl {{ kubectl_version }}
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: "0755"
+
+    # ---------------- Helm ----------------
+    - name: Download Helm {{ helm_version }}
+      ansible.builtin.get_url:
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: /tmp/helm.tar.gz
+
+    - name: Extract Helm
+      ansible.builtin.unarchive:
+        src: /tmp/helm.tar.gz
+        dest: /tmp
+        remote_src: true
+
+    - name: Install Helm binary
+      ansible.builtin.copy:
+        src: /tmp/linux-amd64/helm
+        dest: /usr/local/bin/helm
+        mode: "0755"
+        remote_src: true
+
+    # ---------------- Terraform (needed by the Jenkinsfile's Infrastructure Provisioning stage) ----------------
+    # HashiCorp's apt repo does not have a "resolute" (Ubuntu 26.04) suite yet, and probably won't
+    # for a while — adding it with the auto-detected codename 404s. "noble" (24.04) packages are
+    # confirmed compatible; this is a deliberate override, not a mistake.
+    - name: Add HashiCorp GPG key
+      ansible.builtin.get_url:
+        url: https://apt.releases.hashicorp.com/gpg
+        dest: /tmp/hashicorp.gpg
+        mode: "0644"
+
+    - name: Dearmor HashiCorp GPG key
+      ansible.builtin.command: gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg /tmp/hashicorp.gpg
+      args:
+        creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+    - name: Add HashiCorp apt repository (pinned to noble — see comment above)
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com noble main"
+        state: present
+        filename: hashicorp
+
+    - name: Install Terraform
+      ansible.builtin.apt:
+        update_cache: true
+        name: terraform
+        state: present
+
+    # ---------------- Trivy (checksum-verified — see the CVE-2026-33634 note above) ----------------
+    - name: Download Trivy {{ trivy_version }} .deb package
+      ansible.builtin.get_url:
+        url: "https://github.com/aquasecurity/trivy/releases/download/v{{ trivy_version }}/trivy_{{ trivy_version }}_Linux-64bit.deb"
+        dest: "/tmp/trivy_{{ trivy_version }}_Linux-64bit.deb"
+
+    - name: Download Trivy {{ trivy_version }} official checksums
+      ansible.builtin.get_url:
+        url: "https://github.com/aquasecurity/trivy/releases/download/v{{ trivy_version }}/trivy_{{ trivy_version }}_checksums.txt"
+        dest: "/tmp/trivy_{{ trivy_version }}_checksums.txt"
+
+    - name: Verify the downloaded .deb against Trivy's published checksum before installing anything
+      ansible.builtin.shell: |
+        set -euo pipefail
+        cd /tmp
+        grep "trivy_{{ trivy_version }}_Linux-64bit.deb" "trivy_{{ trivy_version }}_checksums.txt" | sha256sum -c -
+      changed_when: false
+
+    - name: Install Trivy from the verified package
+      ansible.builtin.apt:
+        deb: "/tmp/trivy_{{ trivy_version }}_Linux-64bit.deb"
+
+    # ---------------- Java (needed for Jenkins) ----------------
+    - name: Install OpenJDK 21
+      ansible.builtin.apt:
+        name: openjdk-21-jre-headless
+        state: present
+
+    # ---------------- Jenkins ----------------
+    - name: Ensure keyring directory exists
+      ansible.builtin.file:
+        path: /usr/share/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Jenkins repository signing key
+      ansible.builtin.get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        dest: /usr/share/keyrings/jenkins-keyring.asc
+        mode: "0644"
+
+    - name: Add Jenkins apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+        state: present
+        filename: jenkins
+
+    - name: Install Jenkins
+      ansible.builtin.apt:
+        update_cache: true
+        name: jenkins
+        state: present
+
+    - name: Ensure Jenkins is running and enabled
+      ansible.builtin.systemd:
+        name: jenkins
+        state: started
+        enabled: true
+
+    - name: Allow the jenkins user passwordless sudo (needed so pipeline-triggered re-runs of this playbook can use become)
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/jenkins-nopasswd
+        content: "jenkins ALL=(ALL) NOPASSWD:ALL\n"
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Add jenkins user to docker group so pipeline steps can run docker build (no root workarounds needed)
+      ansible.builtin.user:
+        name: jenkins
+        groups: docker
+        append: true
+
+    - name: Restart Jenkins to pick up docker group membership
+      ansible.builtin.systemd:
+        name: jenkins
+        state: restarted
+
+    - name: Wait for Jenkins to fully start
+      ansible.builtin.wait_for:
+        path: /var/lib/jenkins/secrets/initialAdminPassword
+        timeout: 120
+
+    - name: Read Jenkins initial admin password
+      ansible.builtin.command: cat /var/lib/jenkins/secrets/initialAdminPassword
+      register: jenkins_initial_password
+      changed_when: false
+
+    - name: Show Jenkins initial admin password
+      ansible.builtin.debug:
+        msg: "Jenkins initial admin password: {{ jenkins_initial_password.stdout }}"

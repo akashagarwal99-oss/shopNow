@@ -1,0 +1,274 @@
+pipeline {
+    agent any
+
+    parameters {
+        booleanParam(name: 'RUN_INFRA', defaultValue: false,
+            description: 'Run the Terraform infrastructure-provisioning stage')
+        booleanParam(name: 'RUN_CONFIG', defaultValue: false,
+            description: 'Re-run the Ansible configuration-management stage against this box')
+        booleanParam(name: 'ALLOW_VULNERABLE_IMAGES', defaultValue: false,
+            description: 'Documented exception: scan and report but do NOT fail the build on HIGH/CRITICAL Trivy findings. Default false — leave it that way unless you have a specific, temporary reason and you are watching the output.')
+        string(name: 'IMAGE_TAG', defaultValue: '',
+            description: 'Leave blank to tag images with the short Git SHA of the commit being built (recommended). Set explicitly only to redeploy a specific previously-built tag.')
+    }
+
+    environment {
+        PATH           = "/usr/local/bin:${env.PATH}"
+        AWS_REGION     = 'ap-south-1'
+        AWS_ACCOUNT_ID = '655383751644'
+        ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        CLUSTER_NAME   = 'akash-shopnow-eks'
+        NAMESPACE      = 'akash-shopnow'
+        DEPLOY_BRANCH  = 'main'
+        // IMAGE_TAG is deliberately not set here — the repo isn't checked out yet when this
+        // block evaluates, and the tag is derived from the Git SHA in the Checkout stage below.
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    def gitSha = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    // Never "latest" — an explicit param can override for a deliberate redeploy,
+                    // otherwise every build gets an immutable, traceable Git-SHA-based tag.
+                    env.IMAGE_TAG = params.IMAGE_TAG?.trim() ? params.IMAGE_TAG.trim() : gitSha
+                    def currentBranch = env.GIT_BRANCH ?: env.BRANCH_NAME ?: 'unknown'
+                    echo "Building commit ${gitSha} on branch ${currentBranch} — image tag: ${env.IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Build & Test') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    # Real detection, not a fabricated pass: only run `npm test` where package.json
+                    # actually defines one. As of writing, backend/package.json has no "test" script
+                    # at all (only start/dev) — that's a fact about the source, not something to hide
+                    # behind a fake green stage. frontend/admin both define "test": "react-scripts
+                    # test" (Jest via Create React App) but the repo currently has zero *.test.js
+                    # files, so --passWithNoTests keeps that a non-failure (nothing written yet) as
+                    # distinct from a real failure (something written and broken) — if test files are
+                    # added later, this same stage starts running them for real with no changes needed.
+
+                    echo "--- backend ---"
+                    if jq -e '.scripts.test' backend/package.json > /dev/null 2>&1; then
+                        docker run --rm -v "${WORKSPACE}/backend:/app" -w /app node:18-alpine \
+                            sh -c "npm ci --no-audit --prefer-offline && npm test"
+                    else
+                        echo "backend/package.json defines no \\"test\\" script (only start/dev) — skipping rather than fabricating a pass."
+                    fi
+
+                    echo "--- frontend ---"
+                    if jq -e '.scripts.test' frontend/package.json > /dev/null 2>&1; then
+                        docker run --rm -e CI=true -v "${WORKSPACE}/frontend:/app" -w /app node:18-alpine \
+                            sh -c "npm ci --no-audit --prefer-offline && npm test -- --watchAll=false --passWithNoTests"
+                    else
+                        echo "frontend/package.json has no \\"test\\" script — skipping."
+                    fi
+
+                    echo "--- admin ---"
+                    if jq -e '.scripts.test' admin/package.json > /dev/null 2>&1; then
+                        docker run --rm -e CI=true -v "${WORKSPACE}/admin:/app" -w /app node:18-alpine \
+                            sh -c "npm ci --no-audit --prefer-offline && npm test -- --watchAll=false --passWithNoTests"
+                    else
+                        echo "admin/package.json has no \\"test\\" script — skipping."
+                    fi
+                '''
+            }
+        }
+
+        stage('Infrastructure Provisioning') {
+            when { expression { return params.RUN_INFRA } }
+            steps {
+                dir('terraform') {
+                    sh '''
+                        set -euo pipefail
+                        terraform init -input=false
+                        terraform plan -input=false -out=tfplan
+                        terraform apply -input=false tfplan
+                    '''
+                }
+            }
+        }
+
+        stage('Configuration Management') {
+            when { expression { return params.RUN_CONFIG } }
+            steps {
+                dir('ansible') {
+                    sh '''
+                        set -euo pipefail
+                        ansible-playbook -i "localhost," -c local playbook.yml
+                    '''
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    docker build -t ${ECR_REGISTRY}/akash-shopnow/backend:${IMAGE_TAG} backend/
+                    docker build --build-arg USER_NAME="" -t ${ECR_REGISTRY}/akash-shopnow/frontend:${IMAGE_TAG} frontend/
+                    docker build --build-arg USER_NAME="" -t ${ECR_REGISTRY}/akash-shopnow/admin:${IMAGE_TAG} admin/
+                '''
+            }
+        }
+
+        stage('Security Scan (Trivy)') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    SEVERITY="HIGH,CRITICAL"
+                    SCAN_EXIT_CODE=1
+                    if [ "${ALLOW_VULNERABLE_IMAGES}" = "true" ]; then
+                        echo "ALLOW_VULNERABLE_IMAGES=true — documented exception path: scanning and reporting, NOT failing the build on findings."
+                        SCAN_EXIT_CODE=0
+                    fi
+                    for svc in backend frontend admin; do
+                        IMAGE="${ECR_REGISTRY}/akash-shopnow/${svc}:${IMAGE_TAG}"
+                        echo "--- trivy scan: ${IMAGE} ---"
+                        # --ignore-unfixed: don't fail the build over CVEs with no available fix yet —
+                        # there is nothing actionable to do about those today, and failing on them
+                        # anyway just trains people to ignore this stage.
+                        trivy image --severity "${SEVERITY}" --ignore-unfixed --exit-code "${SCAN_EXIT_CODE}" "${IMAGE}"
+                    done
+                '''
+            }
+        }
+
+        stage('ECR Push') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+                    docker push ${ECR_REGISTRY}/akash-shopnow/backend:${IMAGE_TAG}
+                    docker push ${ECR_REGISTRY}/akash-shopnow/frontend:${IMAGE_TAG}
+                    docker push ${ECR_REGISTRY}/akash-shopnow/admin:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Deploy to EKS') {
+            // Feature branches build/test/scan (all stages above this one) so you get full CI
+            // feedback on every push, but only DEPLOY_BRANCH is allowed to touch the live cluster.
+            // Checking env.GIT_BRANCH (set by the standard Git checkout, typically "origin/main")
+            // rather than the declarative `branch` directive, since `branch` only works in a
+            // Multibranch Pipeline job — this Jenkinsfile targets the plain "Pipeline script from
+            // SCM" job type, where `branch` would error rather than just evaluate false.
+            when {
+                expression {
+                    def currentBranch = env.GIT_BRANCH ?: env.BRANCH_NAME ?: ''
+                    return currentBranch == env.DEPLOY_BRANCH || currentBranch == "origin/${env.DEPLOY_BRANCH}"
+                }
+            }
+            steps {
+                sh '''
+                    set -euo pipefail
+                    aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}
+
+                    # Only IMAGE_TAG is templated in the manifests — the ECR registry host is baked
+                    # in directly (fixed for this AWS account), so envsubst only needs this one var.
+                    export IMAGE_TAG
+
+                    envsubst < kubernetes/backend/deployment.yaml  | kubectl apply -f -
+                    envsubst < kubernetes/frontend/deployment.yaml | kubectl apply -f -
+                    envsubst < kubernetes/admin/deployment.yaml    | kubectl apply -f -
+                '''
+            }
+        }
+
+        stage('Rollout & Health Verification') {
+            when {
+                expression {
+                    def currentBranch = env.GIT_BRANCH ?: env.BRANCH_NAME ?: ''
+                    return currentBranch == env.DEPLOY_BRANCH || currentBranch == "origin/${env.DEPLOY_BRANCH}"
+                }
+            }
+            steps {
+                sh '''
+                    set -euo pipefail
+
+                    for dep in backend frontend admin; do
+                        kubectl rollout status deployment/${dep} -n ${NAMESPACE} --timeout=180s
+                    done
+
+                    echo "--- Deployment Available conditions ---"
+                    for dep in backend frontend admin; do
+                        AVAILABLE=$(kubectl get deployment ${dep} -n ${NAMESPACE} -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')
+                        echo "${dep}: Available=${AVAILABLE}"
+                        [ "${AVAILABLE}" = "True" ] || { echo "FAIL: deployment/${dep} is not Available"; exit 1; }
+                    done
+
+                    echo "--- Pod readiness ---"
+                    for app in backend frontend admin; do
+                        NOT_READY=$(kubectl get pods -n ${NAMESPACE} -l app=${app} -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\\n"}{end}' | grep -c false || true)
+                        if [ "${NOT_READY}" != "0" ]; then
+                            echo "FAIL: ${app} has ${NOT_READY} pod(s) not Ready"
+                            kubectl get pods -n ${NAMESPACE} -l app=${app}
+                            exit 1
+                        fi
+                        echo "${app}: all pods Ready"
+                    done
+                '''
+            }
+        }
+
+        stage('Testing and Monitoring') {
+            when {
+                expression {
+                    def currentBranch = env.GIT_BRANCH ?: env.BRANCH_NAME ?: ''
+                    return currentBranch == env.DEPLOY_BRANCH || currentBranch == "origin/${env.DEPLOY_BRANCH}"
+                }
+            }
+            steps {
+                sh '''
+                    set -euo pipefail
+
+                    echo "Waiting for the ALB hostname to be assigned (cloud load balancers are not instant)..."
+                    FRONTEND_URL=""
+                    for i in $(seq 1 18); do
+                        FRONTEND_URL=$(kubectl get ingress frontend-ingress -n ${NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+                        [ -n "${FRONTEND_URL}" ] && break
+                        echo "Attempt ${i}/18: ALB hostname not assigned yet, retrying in 10s..."
+                        sleep 10
+                    done
+                    [ -n "${FRONTEND_URL}" ] || { echo "FAIL: ALB hostname never appeared after 3 minutes"; exit 1; }
+                    echo "Ingress hostname: ${FRONTEND_URL}"
+
+                    echo "Smoke-testing http://${FRONTEND_URL}/api/health"
+                    STATUS="000"
+                    for i in $(seq 1 12); do
+                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${FRONTEND_URL}/api/health" || true)
+                        [ "${STATUS}" = "200" ] && { echo "Backend healthy (HTTP ${STATUS})"; break; }
+                        echo "Attempt ${i}/12: got HTTP ${STATUS}, retrying in 10s..."
+                        sleep 10
+                    done
+                    [ "${STATUS}" = "200" ] || { echo "FAIL: backend did not become healthy in time"; exit 1; }
+
+                    echo "Checking monitoring stack..."
+                    kubectl get pods -n monitoring -l "app.kubernetes.io/name=prometheus" --no-headers 2>/dev/null | grep -q Running \
+                        && echo "Prometheus is running" \
+                        || echo "WARNING: Prometheus not found in the monitoring namespace yet (expected before the monitoring stack is installed)"
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline succeeded — image tag ${env.IMAGE_TAG} built, scanned, and (on ${env.DEPLOY_BRANCH}) deployed to ${env.CLUSTER_NAME}"
+        }
+        failure {
+            echo "Pipeline failed — check the stage logs above for the first red stage"
+        }
+        always {
+            sh 'docker image prune -f || true'
+            echo "Build #${env.BUILD_NUMBER} finished with status: ${currentBuild.currentResult}"
+        }
+    }
+}

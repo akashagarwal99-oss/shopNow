@@ -1,0 +1,91 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: akash-shopnow-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack   # required — see note below
+spec:
+  groups:
+    - name: akash-shopnow.rules
+      rules:
+        - alert: ShopNowPodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total{namespace="akash-shopnow"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} is restarting frequently"
+            description: "{{ $labels.pod }} in namespace akash-shopnow restarted more than 3 times in 15m."
+
+        - alert: ShopNowDeploymentReplicasMismatch
+          expr: |
+            kube_deployment_spec_replicas{namespace="akash-shopnow", deployment=~"backend|frontend|admin"}
+            != kube_deployment_status_replicas_available{namespace="akash-shopnow", deployment=~"backend|frontend|admin"}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.deployment }} available replicas don't match desired"
+            description: "{{ $labels.deployment }} has had a mismatch between desired and available replicas for over 5 minutes — longer than a normal rolling update takes."
+
+        - alert: ShopNowDeploymentDown
+          expr: kube_deployment_status_replicas_available{namespace="akash-shopnow", deployment=~"backend|frontend|admin"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.deployment }} has zero available replicas"
+            description: "{{ $labels.deployment }} has had 0 available replicas for over 2 minutes — that part of the app is down."
+
+        - alert: ShopNowHighMemoryUsage
+          expr: |
+            sum(container_memory_working_set_bytes{namespace="akash-shopnow", container!=""}) by (pod)
+            / sum(kube_pod_container_resource_limits{namespace="akash-shopnow", resource="memory"}) by (pod)
+            > 0.9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} is close to its memory limit"
+            description: "{{ $labels.pod }} is using over 90% of its memory limit."
+
+        - alert: ShopNowHPAAtMaxReplicas
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace="akash-shopnow"}
+            >= kube_horizontalpodautoscaler_spec_max_replicas{namespace="akash-shopnow"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.horizontalpodautoscaler }} has been at max replicas for 15m+"
+            description: "Autoscaling has hit its ceiling for a sustained period — consider raising maxReplicas or investigating sustained load."
+
+        - alert: ShopNowNodeNotReady
+          expr: kube_node_status_condition{condition="Ready", status="true"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{ $labels.node }} is not Ready"
+            description: "Node {{ $labels.node }} has not reported Ready for over 5 minutes."
+
+        - alert: ShopNowNodeHighCPU
+          expr: |
+            100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node {{ $labels.instance }} CPU usage is high"
+            description: "{{ $labels.instance }} has averaged over 85% CPU utilization for 10+ minutes."
+
+        - alert: ShopNowNodeHighMemory
+          expr: |
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node {{ $labels.instance }} memory usage is high"
+            description: "{{ $labels.instance }} has used over 85% of available memory for 10+ minutes."

@@ -1,0 +1,11 @@
+aws_region       = "ap-south-1"          # AWS account 655383751644 — Terraform uses whatever
+                                          # account your credentials belong to; it doesn't need
+                                          # to be told the account ID explicitly.
+student_username = "akash"
+my_ip_cidr       = "203.0.113.10/32"     # replace with your own IP/32 — get it with:
+                                          #   curl -s https://checkip.amazonaws.com
+
+# Only needed if you want a different key pair name than the variable's own default
+# (akash-shopnow-jenkins-key). Either create a key pair with that exact name, or uncomment
+# and set this to one you already have:
+# jenkins_key_name = "your-existing-keypair-name"
