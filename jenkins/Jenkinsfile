@@ -111,8 +111,8 @@ pipeline {
                 sh '''
                     set -euo pipefail
                     docker build -t ${ECR_REGISTRY}/akash-shopnow/backend:${IMAGE_TAG} backend/
-                    docker build --build-arg USER_NAME="" -t ${ECR_REGISTRY}/akash-shopnow/frontend:${IMAGE_TAG} frontend/
-                    docker build --build-arg USER_NAME="" -t ${ECR_REGISTRY}/akash-shopnow/admin:${IMAGE_TAG} admin/
+                    docker build --build-arg USER_NAME=akash -t ${ECR_REGISTRY}/akash-shopnow/frontend:${IMAGE_TAG} frontend/
+                    docker build --build-arg USER_NAME=akash -t ${ECR_REGISTRY}/akash-shopnow/admin:${IMAGE_TAG} admin/
                 '''
             }
         }
@@ -240,10 +240,10 @@ pipeline {
                     [ -n "${FRONTEND_URL}" ] || { echo "FAIL: ALB hostname never appeared after 3 minutes"; exit 1; }
                     echo "Ingress hostname: ${FRONTEND_URL}"
 
-                    echo "Smoke-testing http://${FRONTEND_URL}/api/health"
+                    echo "Smoke-testing http://${FRONTEND_URL}/akash/api/health"
                     STATUS="000"
                     for i in $(seq 1 12); do
-                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${FRONTEND_URL}/api/health" || true)
+                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${FRONTEND_URL}/akash/api/health" || true)
                         [ "${STATUS}" = "200" ] && { echo "Backend healthy (HTTP ${STATUS})"; break; }
                         echo "Attempt ${i}/12: got HTTP ${STATUS}, retrying in 10s..."
                         sleep 10

@@ -35,3 +35,11 @@ spec:
             httpGet: { path: /health, port: 80 }
             initialDelaySeconds: 10
             periodSeconds: 20
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: admin-nginx-config

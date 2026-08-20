@@ -4,7 +4,7 @@ metadata:
   name: akash-shopnow-alerts
   namespace: monitoring
   labels:
-    release: kube-prometheus-stack   # required — see note below
+    release: monitoring   # required — see note below
 spec:
   groups:
     - name: akash-shopnow.rules
