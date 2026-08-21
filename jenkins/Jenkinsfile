@@ -44,8 +44,8 @@ pipeline {
             steps {
                 sh '''
                     set -euo pipefail
-                    # Real detection, not a fabricated pass: only run `npm test` where package.json
-                    # actually defines one. As of writing, backend/package.json has no "test" script
+                    # Real detection, not a fabricated pass: only run `npm test` where package.json actually defines one.
+                    # As of writing, backend/package.json has no "test" script
                     # at all (only start/dev) — that's a fact about the source, not something to hide
                     # behind a fake green stage. frontend/admin both define "test": "react-scripts
                     # test" (Jest via Create React App) but the repo currently has zero *.test.js
