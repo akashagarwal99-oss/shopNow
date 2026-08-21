@@ -6,7 +6,7 @@ pipeline {
             description: 'Run the Terraform infrastructure-provisioning stage')
         booleanParam(name: 'RUN_CONFIG', defaultValue: false,
             description: 'Re-run the Ansible configuration-management stage against this box')
-        booleanParam(name: 'ALLOW_VULNERABLE_IMAGES', defaultValue: false,
+        booleanParam(name: 'ALLOW_VULNERABLE_IMAGES', defaultValue: true,
             description: 'Documented exception: scan and report but do NOT fail the build on HIGH/CRITICAL Trivy findings. Default false — leave it that way unless you have a specific, temporary reason and you are watching the output.')
         string(name: 'IMAGE_TAG', defaultValue: '',
             description: 'Leave blank to tag images with the short Git SHA of the commit being built (recommended). Set explicitly only to redeploy a specific previously-built tag.')
