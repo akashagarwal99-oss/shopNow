@@ -95,11 +95,16 @@ pipeline {
         }
 
         stage('Configuration Management') {
-            when { expression { return params.RUN_CONFIG } }
+            when { expression { return params.RUN_INFRA || params.RUN_CONFIG } }
             steps {
                 dir('ansible') {
                     sh '''
                         set -euo pipefail
+                        if [ "${RUN_INFRA}" = "true" ]; then
+                            echo "Terraform completed successfully — running Ansible configuration management."
+                        else
+                            echo "RUN_CONFIG=true — running Ansible configuration management independently."
+                        fi
                         ansible-playbook -i "localhost," -c local playbook.yml
                     '''
                 }
