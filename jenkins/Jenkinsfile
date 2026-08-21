@@ -176,6 +176,8 @@ pipeline {
                     export IMAGE_TAG
 
                     envsubst < kubernetes/backend/deployment.yaml  | kubectl apply -f -
+                    kubectl apply -f kubernetes/frontend/nginx-configmap.yaml
+                    kubectl apply -f kubernetes/admin/nginx-configmap.yaml
                     envsubst < kubernetes/frontend/deployment.yaml | kubectl apply -f -
                     envsubst < kubernetes/admin/deployment.yaml    | kubectl apply -f -
                 '''
