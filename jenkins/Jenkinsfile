@@ -139,6 +139,8 @@ pipeline {
                     set -euo pipefail
                     SEVERITY="HIGH,CRITICAL"
                     SCAN_EXIT_CODE=1
+                    ALLOW_VULNERABLE_IMAGES="${ALLOW_VULNERABLE_IMAGES:-true}"
+                    echo "ALLOW_VULNERABLE_IMAGES=${ALLOW_VULNERABLE_IMAGES}"
                     if [ "${ALLOW_VULNERABLE_IMAGES}" = "true" ]; then
                         echo "ALLOW_VULNERABLE_IMAGES=true — documented exception path: scanning and reporting, NOT failing the build on findings."
                         SCAN_EXIT_CODE=0
