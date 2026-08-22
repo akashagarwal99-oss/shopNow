@@ -13,6 +13,7 @@
     # version >= 0.69.3, and only deliberately.
     trivy_version: "0.74.0"
     restart_jenkins: false
+    initial_jenkins_setup: false
 
   tasks:
     - name: Update apt cache
@@ -213,12 +214,15 @@
       ansible.builtin.wait_for:
         path: /var/lib/jenkins/secrets/initialAdminPassword
         timeout: 120
+      when: initial_jenkins_setup | bool
 
     - name: Read Jenkins initial admin password
       ansible.builtin.command: cat /var/lib/jenkins/secrets/initialAdminPassword
       register: jenkins_initial_password
       changed_when: false
+      when: initial_jenkins_setup | bool
 
     - name: Show Jenkins initial admin password
       ansible.builtin.debug:
         msg: "Jenkins initial admin password: {{ jenkins_initial_password.stdout }}"
+      when: initial_jenkins_setup | bool
