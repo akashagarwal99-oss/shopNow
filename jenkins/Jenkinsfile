@@ -22,6 +22,7 @@ pipeline {
         AWS_ACCOUNT_ID = '655383751644'
         ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         CLUSTER_NAME   = 'akash-shopnow-eks'
+        K8S_VERSION    = '1.34'
         NAMESPACE      = 'akash-shopnow'
         DEPLOY_BRANCH  = 'main'
         // IMAGE_TAG is deliberately not set here — the repo isn't checked out yet when this
@@ -90,6 +91,13 @@ pipeline {
                 dir('terraform') {
                     sh '''
                         set -euo pipefail
+                        echo "=== Bootstrapping EKS version selections ==="
+                        AWS_REGION="${AWS_REGION}" \
+                        CLUSTER_NAME="${CLUSTER_NAME}" \
+                        K8S_VERSION="${K8S_VERSION}" \
+                        ./bootstrap-versions.sh
+                        echo "=== Initializing Terraform ==="
+
                         terraform init -input=false
                         if [ -z "${MY_IP_CIDR}" ]; then
                             echo "ERROR: MY_IP_CIDR is required when RUN_INFRA=true"
