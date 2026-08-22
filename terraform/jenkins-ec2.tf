@@ -1,17 +1,3 @@
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"] # Canonical
-
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-resolute-26.04-amd64-server-*"]
-  }
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-}
-
 resource "aws_security_group" "jenkins" {
   name_prefix = "${var.student_username}-shopnow-jenkins-"
   description = "Jenkins EC2 - SSH + Jenkins UI, locked to my IP"
@@ -75,13 +61,17 @@ resource "aws_iam_instance_profile" "jenkins" {
 }
 
 resource "aws_instance" "jenkins" {
-  ami                         = data.aws_ami.ubuntu.id
+  ami                         = var.jenkins_ami_id
   instance_type               = var.jenkins_instance_type
   subnet_id                   = module.vpc.public_subnets[0]
   vpc_security_group_ids      = [aws_security_group.jenkins.id]
   iam_instance_profile        = aws_iam_instance_profile.jenkins.name
   key_name                    = var.jenkins_key_name
   associate_public_ip_address = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
   root_block_device {
     volume_size = 30

@@ -95,6 +95,9 @@ pipeline {
                             echo "ERROR: MY_IP_CIDR is required when RUN_INFRA=true"
                             exit 1
                         fi
+
+                        echo "Using Jenkins access CIDR: ${MY_IP_CIDR}"
+
                         terraform plan -input=false -var="my_ip_cidr=${MY_IP_CIDR}" -out=tfplan
                         terraform apply -input=false tfplan
                     '''

@@ -67,3 +67,9 @@ variable "my_ip_cidr" {
   description = "Your workstation's public IP in CIDR form, e.g. 103.10.20.5/32 — restricts SSH/Jenkins UI access. Get it with: curl -s https://checkip.amazonaws.com"
   type        = string
 }
+
+variable "jenkins_ami_id" {
+  description = "Pinned Ubuntu AMI ID for Jenkins in ap-south-1"
+  type        = string
+  default     = "ami-07c5bdc05185b65c6"
+}

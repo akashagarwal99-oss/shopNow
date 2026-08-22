@@ -5,6 +5,8 @@ student_username = "akash"
 my_ip_cidr       = "203.0.113.10/32"     # replace with your own IP/32 — get it with:
                                           #   curl -s https://checkip.amazonaws.com
 
+jenkins_ami_id  = "ami-07c5bdc05185b65c6"
+
 # Only needed if you want a different key pair name than the variable's own default
 # (akash-shopnow-jenkins-key). Either create a key pair with that exact name, or uncomment
 # and set this to one you already have:
