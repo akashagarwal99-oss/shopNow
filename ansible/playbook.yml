@@ -12,6 +12,7 @@
     # rather than the aquasecurity apt repo, as defense in depth. Bump this only to another
     # version >= 0.69.3, and only deliberately.
     trivy_version: "0.74.0"
+    restart_jenkins: false
 
   tasks:
     - name: Update apt cache
@@ -206,6 +207,7 @@
       ansible.builtin.systemd:
         name: jenkins
         state: restarted
+      when: restart_jenkins | bool
 
     - name: Wait for Jenkins to fully start
       ansible.builtin.wait_for:
