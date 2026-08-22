@@ -285,10 +285,26 @@ pipeline {
         }
         failure {
             echo "Pipeline failed — check the stage logs above for the first red stage"
+
+            emailext(
+                subject: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+    Jenkins pipeline failed.
+
+    Job: ${env.JOB_NAME}
+    Build: #${env.BUILD_NUMBER}
+    Branch: ${env.GIT_BRANCH ?: 'unknown'}
+    Build URL: ${env.BUILD_URL}
+
+    Please check the Jenkins console output for details.
+    """,
+                to: 'akash.agarwal99@gmail.com'
+            )
         }
         always {
             sh 'docker image prune -f || true'
             echo "Build #${env.BUILD_NUMBER} finished with status: ${currentBuild.currentResult}"
         }
     }
+
 }
