@@ -8,6 +8,7 @@ terraform/*.tfplan
 terraform/tfplan
 terraform/crash.log
 terraform/crash.*.log
+terraform/deployment.auto.tfvars
 
 # --- Credentials / secrets ---
 *.pem

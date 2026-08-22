@@ -13,14 +13,32 @@ module "eks" {
 
   # Automatically grants the identity running `terraform apply` cluster-admin access
   # (via an EKS access entry) so you can `aws eks update-kubeconfig` immediately.
-  enable_cluster_creator_admin_permissions = true
+  enable_cluster_creator_admin_permissions = false
+
+  kms_key_administrators = [
+    aws_iam_role.jenkins.arn
+  ]
 
   addons = {
-    coredns                = {}
-    kube-proxy             = {}
-    vpc-cni                = { before_compute = true }
-    eks-pod-identity-agent = { before_compute = true } # needed for the roles in pod-identity.tf
-    aws-ebs-csi-driver     = {}
+    coredns                = {
+      addon_version = var.eks_addon_versions.coredns
+    }
+    kube-proxy             = {
+      addon_version = var.eks_addon_versions.kube_proxy
+    }
+    vpc-cni                = { 
+      addon_version  = var.eks_addon_versions.vpc_cni
+      before_compute = true
+    }
+    
+    eks-pod-identity-agent = { 
+      addon_version  = var.eks_addon_versions.eks_pod_identity_agent
+      before_compute = true
+    } # needed for the roles in pod-identity.tf
+    
+    aws-ebs-csi-driver     = {
+      addon_version = var.eks_addon_versions.aws_ebs_csi_driver
+    }
   }
 
   eks_managed_node_groups = {
@@ -30,6 +48,9 @@ module "eks" {
       min_size       = var.node_min_size
       max_size       = var.node_max_size
       desired_size   = var.node_desired_size
+
+      ami_release_version            = var.node_ami_release_version
+      use_latest_ami_release_version = false
     }
   }
 

@@ -60,7 +60,7 @@ variable "jenkins_instance_type" {
 variable "jenkins_key_name" {
   description = "EC2 key pair name for SSH access to the Jenkins box. This must already exist in ap-south-1 under this exact name (aws ec2 create-key-pair --key-name akash-shopnow-jenkins-key --query 'KeyMaterial' --output text > ~/.ssh/akash-shopnow-jenkins-key.pem && chmod 400 ~/.ssh/akash-shopnow-jenkins-key.pem), or override this variable in terraform.tfvars with a key pair you already have."
   type        = string
-  default     = "akash-shopnow-jenkins-key"
+  default     = "akash-shopnow-key"
 }
 
 variable "my_ip_cidr" {
@@ -72,4 +72,20 @@ variable "jenkins_ami_id" {
   description = "Pinned Ubuntu AMI ID for Jenkins in ap-south-1"
   type        = string
   default     = "ami-07c5bdc05185b65c6"
+}
+
+variable "eks_addon_versions" {
+  description = "EKS add-on versions selected during environment bootstrap"
+  type = object({
+    coredns                = string
+    kube_proxy             = string
+    vpc_cni                = string
+    eks_pod_identity_agent = string
+    aws_ebs_csi_driver     = string
+  })
+}
+
+variable "node_ami_release_version" {
+  description = "EKS managed node group AMI release selected during environment bootstrap"
+  type        = string
 }
