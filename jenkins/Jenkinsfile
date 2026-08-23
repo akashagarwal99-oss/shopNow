@@ -278,6 +278,55 @@ pipeline {
                     done
                     [ "${STATUS}" = "200" ] || { echo "FAIL: backend did not become healthy in time"; exit 1; }
 
+                    echo "=== Application smoke tests ==="
+
+                    check_http() {
+                        local name="$1"
+                        local url="$2"
+                        local expected="$3"
+
+                        echo "Testing ${name}: ${url}"
+
+                        STATUS=$(curl -s -o /tmp/smoke-response \
+                            -w "%{http_code}" \
+                            --max-time 20 \
+                            "${url}" || true)
+
+                        echo "${name}: HTTP ${STATUS}"
+
+                        [ "${STATUS}" = "${expected}" ] || {
+                            echo "FAIL: ${name} returned HTTP ${STATUS}, expected ${expected}"
+                            cat /tmp/smoke-response || true
+                            exit 1
+                        }
+                    }
+
+                    # Frontend UI
+                    check_http \
+                        "Frontend" \
+                        "http://${FRONTEND_URL}/" \
+                        "200"
+
+                    # Admin UI
+                    check_http \
+                        "Admin UI" \
+                        "http://${FRONTEND_URL}/akash-admin/" \
+                        "200"
+
+                    # Backend health
+                    check_http \
+                        "Backend health" \
+                        "http://${FRONTEND_URL}/akash/api/health" \
+                        "200"
+
+                    # Backend API
+                    check_http \
+                        "Backend products API" \
+                        "http://${FRONTEND_URL}/akash/api/products?limit=1" \
+                        "200"
+
+                    echo "All application smoke tests passed."
+
                     echo "Checking monitoring stack..."
                     kubectl get pods -n monitoring -l "app.kubernetes.io/name=prometheus" --no-headers 2>/dev/null | grep -q Running \
                         && echo "Prometheus is running" \
