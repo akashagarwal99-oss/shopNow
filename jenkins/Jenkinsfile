@@ -304,7 +304,7 @@ pipeline {
                     # Frontend UI
                     check_http \
                         "Frontend" \
-                        "http://${FRONTEND_URL}/" \
+                        "http://${FRONTEND_URL}/akash/" \
                         "200"
 
                     # Admin UI
