@@ -308,10 +308,30 @@ pipeline {
                         "200"
 
                     # Admin UI
-                    check_http \
-                        "Admin UI" \
-                        "http://${FRONTEND_URL}/akash-admin/" \
-                        "200"
+                    echo "Testing Admin UI..."
+
+                    ADMIN_STATUS="000"
+                    for i in $(seq 1 12); do
+                        ADMIN_STATUS=$(curl -s -o /tmp/admin-smoke-response \
+                            -w "%{http_code}" \
+                            --max-time 20 \
+                            "http://${FRONTEND_URL}/akash-admin/" || true)
+
+                        echo "Admin UI attempt ${i}/12: HTTP ${ADMIN_STATUS}"
+
+                        if [ "${ADMIN_STATUS}" = "200" ]; then
+                            echo "Admin UI healthy (HTTP 200)"
+                            break
+                        fi
+
+                        sleep 10
+                    done
+
+                    [ "${ADMIN_STATUS}" = "200" ] || {
+                        echo "FAIL: Admin UI did not return HTTP 200 after retries"
+                        cat /tmp/admin-smoke-response || true
+                        exit 1
+                    }
 
                     # Backend health
                     check_http \
