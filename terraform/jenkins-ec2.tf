@@ -70,7 +70,7 @@ resource "aws_instance" "jenkins" {
   associate_public_ip_address = true
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 
   root_block_device {
