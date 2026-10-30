@@ -947,99 +947,101 @@ resolving automatically.
 
 ### CI/CD
 
-> **Screenshot placeholder:** `docs/screenshots/01-github-webhook.png`
+![GitHub webhook configuration](docs/screenshots/01-github-webhook.png)
 >
 > GitHub webhook configuration. Proves push-triggered Jenkins integration (§19 step 2).
 
-> **Screenshot placeholder:** `docs/screenshots/02-github-delivery-success.png`
+![GitHub webhook delivery success](docs/screenshots/02-github-delivery-success.png)
 >
 > A successful webhook delivery in GitHub's **Recent Deliveries** view. Confirms the connectivity
 > path GitHub → Jenkins actually works, not just that it's configured (§19, §21).
 
-> **Screenshot placeholder:** `docs/screenshots/03-jenkins-success.png`
+![Jenkins successful pipeline](docs/screenshots/03-jenkins-success.png)
 >
 > A successful Jenkins pipeline run, all stages green. Supports §11.
 
-> **Screenshot placeholder:** `docs/screenshots/04-jenkins-smoke-tests.png`
+![Jenkins smoke tests](docs/screenshots/04-jenkins-smoke-tests.png)
 >
 > Jenkins console output showing the 4 smoke tests (frontend, admin, backend health, backend
 > products API) each returning HTTP 200. Supports §12.
 
-> **Screenshot placeholder:** `docs/screenshots/05-ecr-images.png`
+![Amazon ECR repositories](docs/screenshots/05-ecr-repositories.png)
+
+![Amazon ECR images](docs/screenshots/05-ecr-images.png)
 >
 > The three ECR repositories with SHA-tagged images. Supports §7.
 
 ### Infrastructure
 
-> **Screenshot placeholder:** `docs/screenshots/06-terraform-s3-state.png`
+![Terraform remote state in S3](docs/screenshots/06-terraform-s3-state.png)
 >
 > The Terraform state object present in the S3 bucket. Supports §9.
 
-> **Screenshot placeholder:** `docs/screenshots/08-eks-nodes.png`
+![EKS worker nodes](docs/screenshots/08-eks-nodes.png)
 >
 > `kubectl get nodes` showing the `c7i-flex.large` nodes in `Ready` state. Supports §8.
 
 ### Kubernetes
 
-> **Screenshot placeholder:** `docs/screenshots/09-kubernetes-pods.png`
+![ShopNow and monitoring Kubernetes pods](docs/screenshots/09-kubernetes-pods.png)
 >
 > `kubectl get pods -n akash-shopnow`, all pods `Running`. Supports §13.
 
-> **Screenshot placeholder:** `docs/screenshots/10-kubernetes-services.png`
+![ShopNow and monitoring Kubernetes services](docs/screenshots/10-kubernetes-services.png)
 >
 > `kubectl get svc -n akash-shopnow`. Supports §13.
 
-> **Screenshot placeholder:** `docs/screenshots/11-kubernetes-ingress.png`
+![Kubernetes ingress and shared ALB](docs/screenshots/11-kubernetes-ingress.png)
 >
 > `kubectl get ingress -n akash-shopnow`, showing the shared ALB address on both Ingress objects.
 > Supports §13.
 
-> **Screenshot placeholder:** `docs/screenshots/12-hpa.png`
+![Horizontal Pod Autoscaler](docs/screenshots/12-hpa.png)
 >
 > `kubectl get hpa -n akash-shopnow`, target vs. current CPU and replica counts. Supports §14.
 
 ### Monitoring
 
-> **Screenshot placeholder:** `docs/screenshots/13-grafana-dashboard.png`
+![ShopNow Grafana dashboard](docs/screenshots/13-grafana-dashboard.png)
 >
 > The custom ShopNow Grafana dashboard. Supports §16.
 
-> **Screenshot placeholder:** `docs/screenshots/14-hpa-scale-up.png`
+![HPA scale-up in Grafana](docs/screenshots/14-hpa-scale-up.png)
 >
 > Grafana showing CPU and replica count both climbing during the HPA load test. Supports §14.
 
-> **Screenshot placeholder:** `docs/screenshots/15-prometheus-alerts.png`
+![Prometheus alert rules](docs/screenshots/15-prometheus-alerts.png)
 >
 > The Prometheus **Alerts** page with all 8 rules loaded. Supports §15.
 
-> **Screenshot placeholder:** `docs/screenshots/17-alertmanager-email.png`
+![Alertmanager email notification](docs/screenshots/17-alertmanager-email.png)
 >
 > The Alertmanager email notification received in Gmail after a real alert fired. This is
 > confirmed evidence for a feature that was actually built and tested — see §17 for the full
 > configuration path (`PrometheusRule` → Prometheus → Alertmanager → `alertmanager-shopnow-email`
 > → SMTP → inbox).
 
-> **Screenshot placeholder:** `docs/screenshots/18-jenkins-failure-email.png`
+![Jenkins failure notification](docs/screenshots/18-jenkins-failure-email.png)
 >
 > The Jenkins failure-notification email from a deliberately-broken build. Supports §18.
 
 ### Rollback
 
-> **Screenshot placeholder:** `docs/screenshots/19-rollout-history.png`
+![Kubernetes rollout history](docs/screenshots/19-rollout-history.png)
 >
 > `kubectl rollout history deployment/backend -n akash-shopnow`, showing revisions 13 and 14.
 > Supports §20.
 
-> **Screenshot placeholder:** `docs/screenshots/20-rollback-success.png`
+![Backend rollback success](docs/screenshots/20-rollback-success.png)
 >
 > The `kubectl rollout undo --to-revision=13` command and its rollout-status output. Supports §20.
 
-> **Screenshot placeholder:** `docs/screenshots/21-rollback-health.png`
+![Backend health after rollback](docs/screenshots/21-rollback-health.png)
 >
 > Backend pods healthy after the rollback, with `/api/health` returning
 > `{"status":"OK","message":"ShopNow API is running"}`. Supports §20.
 
-> **Screenshot placeholder:** `docs/screenshots/22-restored-backend.png`
+![Backend restored to revision 14](docs/screenshots/22-restored-backend.png)
 >
 > Restoration back to revision 14 and its rollout-status output. Supports §20.
 
