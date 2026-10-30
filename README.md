@@ -975,11 +975,6 @@ resolving automatically.
 >
 > The Terraform state object present in the S3 bucket. Supports §9.
 
-> **Screenshot placeholder:** `docs/screenshots/07-terraform-plan-no-changes.png`
->
-> `terraform plan` reporting `No changes. Your infrastructure matches the configuration.` Supports
-> §9 and the drift-prevention work described in §21.
-
 > **Screenshot placeholder:** `docs/screenshots/08-eks-nodes.png`
 >
 > `kubectl get nodes` showing the `c7i-flex.large` nodes in `Ready` state. Supports §8.
@@ -1016,10 +1011,6 @@ resolving automatically.
 > **Screenshot placeholder:** `docs/screenshots/15-prometheus-alerts.png`
 >
 > The Prometheus **Alerts** page with all 8 rules loaded. Supports §15.
-
-> **Screenshot placeholder:** `docs/screenshots/16-alertmanager.png`
->
-> Alertmanager UI or configuration view, if useful alongside the email evidence below. Supports §17.
 
 > **Screenshot placeholder:** `docs/screenshots/17-alertmanager-email.png`
 >
